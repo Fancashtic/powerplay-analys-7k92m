@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Powerplay – värdeanalys</title>
+<style>
+:root{--bg:#f5f7f5;--card:#fff;--tx:#1d2821;--mu:#607067;--ac:#176b45;--acx:#fff;--bd:#d9e1db;--good:#147447;--bad:#b3261e;--soft:#edf5ef}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#121915;--card:#1c2520;--tx:#e8eee9;--mu:#a4b2a8;--ac:#55c58a;--acx:#102017;--bd:#344139;--good:#72d6a0;--bad:#ffaaa4;--soft:#20372a}}
+:root[data-theme="dark"]{--bg:#121915;--card:#1c2520;--tx:#e8eee9;--mu:#a4b2a8;--ac:#55c58a;--acx:#102017;--bd:#344139;--good:#72d6a0;--bad:#ffaaa4;--soft:#20372a}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.48 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:850px;margin:auto;padding:16px}h1{font-size:1.55rem;margin:.2em 0}h2{font-size:1.08rem;margin:0 0 8px}p{margin:.35em 0}.muted{color:var(--mu);font-size:.9rem}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:15px;margin:13px 0}
+textarea,input,select{width:100%;padding:10px;border:1px solid var(--bd);border-radius:8px;background:var(--bg);color:var(--tx);font:inherit}
+textarea{font:13px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace}
+label{display:block;font-weight:650;margin:10px 0 4px}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+button{border:1px solid var(--ac);background:var(--ac);color:var(--acx);font:inherit;font-weight:650;padding:10px 15px;border-radius:9px;cursor:pointer}
+button.secondary{background:transparent;color:var(--ac)}.buttons{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.error{color:var(--bad);font-weight:650}.kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:12px 0}
+.kpi{background:var(--bg);border:1px solid var(--bd);border-radius:10px;padding:10px}.kpi b{display:block;font-size:1.15rem;font-variant-numeric:tabular-nums}
+.tablewrap{overflow-x:auto}table{border-collapse:collapse;width:100%;font-size:.87rem;white-space:nowrap}th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--bd)}th{color:var(--mu);font-weight:650}
+.positive{color:var(--good);font-weight:700}.negative{color:var(--bad);font-weight:700}.notice{border-left:4px solid var(--ac);padding-left:11px}
+@media(max-width:560px){main{padding:11px}.grid3{grid-template-columns:1fr 1fr}.kpis{grid-template-columns:1fr 1fr}.kpi:last-child{grid-column:span 2}}
+</style>
+</head>
+<body><main>
+<h1>🏒 Powerplay – värdeanalys v6</h1>
+<p class="muted">Åtta matcher · 1 / X / 2 · fokus på positivt EV och långsiktig ROI</p>
+
+<section class="card" id="ocrCard">
+<h2>0. Läs av skärmdump av Powerplay</h2><p class="muted">Version 6: matchnummerstyrd avläsning och kontrollerad systemfilexport. Avläsningen kan fortfarande göra fel: kontrollera alltid varje fält.</p>
+<p class="muted">Välj en eller flera skärmdumpar. OCR läser texten lokalt i din webbläsare. Bilderna skickas inte till vår server. Internet krävs första gången för att ladda OCR-biblioteket.</p>
+<label for="screenshots">Skärmdumpar (PNG, JPG eller HEIC om webbläsaren stöder det)</label>
+<input id="screenshots" type="file" accept="image/*" multiple>
+<div class="buttons"><button id="readImages">Läs av bilder</button></div>
+<p class="muted" id="ocrStatus" aria-live="polite">Ingen bild vald.</p><p class="muted" id="diagnostics" aria-live="polite">Startar diagnostik …</p><p class="muted">På iPhone: öppna HTML-filen i <b>Safari</b>, inte i Filer-appens förhandsvisning. OCR kräver internet och kan ta en stund första gången.</p>
+<progress id="ocrProgress" max="100" value="0" style="width:100%;display:none"></progress>
+<details><summary>Visa/redigera igenkänd text</summary><textarea id="ocrText" rows="9" spellcheck="false" placeholder="Text från skärmdumpen visas här"></textarea><div class="buttons"><button class="secondary" id="interpretText">Tolka text igen</button></div></details>
+<div id="ocrReview" hidden>
+<h2 style="margin-top:16px">Kontrollera alla 8 matcher</h2>
+<p class="muted">Version 6 kopplar varje match till dess avlästa nummer. Saknade matcher lämnas tomma, utan förskjutning. OCR kan fortfarande läsa siffror fel. Fyll i saknade värden och jämför med bilden. Inga rader beräknas förrän du själv bekräftar.</p>
+<label for="ocrOrder">Ordning på sex talen per match i bilden</label>
+<select id="ocrOrder"><option value="auto">Automatisk (försök identifiera %)</option><option value="oddsfirst">Odds 1/X/2, därefter folk % 1/X/2</option><option value="folkfirst">Folk % 1/X/2, därefter odds 1/X/2</option></select>
+<div class="tablewrap"><table id="ocrTable"></table></div>
+<div class="buttons"><button id="confirmOcr">Bekräfta och fyll i kupongen</button></div>
+<p class="error" id="ocrError"></p>
+</div>
+</section>
+<section class="card">
+<h2>1. Mata in kupongen</h2>
+<p class="muted">En match per rad: <b>match; odds 1; odds X; odds 2; folk % 1; folk % X; folk % 2</b>. Använd semikolon eller tab som avgränsare. Decimalkomma fungerar.</p>
+<textarea id="data" rows="9" spellcheck="false" placeholder="Frölunda - Luleå;2,10;4,00;2,90;48;20;32"></textarea>
+<div class="buttons"><button class="secondary" id="example">Fyll i exempel</button><button class="secondary" id="clear">Rensa</button></div>
+</section>
+
+<section class="card">
+<h2>2. Pool och radinställningar</h2>
+<div class="grid3">
+ <div><label for="rows">Max antal rader</label><input id="rows" type="number" min="1" max="5000" value="100"></div>
+ <div><label for="stake">Insats per rad (kr)</label><input id="stake" type="number" min="0.5" step="0.5" value="1"></div>
+ <div><label for="turnover">Omsättning (kr)</label><input id="turnover" type="number" min="0" step="1000" value="500000"></div>
+</div>
+<div class="grid">
+ <div><label for="share">Andel till 8 rätt-potten (%)</label><input id="share" type="number" min="0" max="100" step="0.1" value="70"></div>
+ <div><label for="jackpot">Jackpot/överförd pott (kr)</label><input id="jackpot" type="number" min="0" step="1000" value="0"></div>
+</div>
+<p class="muted">Poolandel och omsättning är inmatningsantaganden – kontrollera aktuell fördelning och pott på Svenska Spels kupong/villkor. Modellen antar att omsättningen består av rader med samma radinsats.</p>
+<div class="buttons"><button id="calculate">Beräkna värderader</button></div>
+<p class="error" id="error"></p>
+</section>
+
+<section class="card" id="results" hidden>
+<h2>3. Resultat – rangordnat efter EV per rad</h2>
+<div class="kpis">
+ <div class="kpi"><span class="muted">Portföljens ROI</span><b id="roi">–</b><span class="muted">förväntat netto / insats</span></div>
+ <div class="kpi"><span class="muted">Förväntat netto</span><b id="net">–</b><span class="muted">kr för valda rader</span></div>
+ <div class="kpi"><span class="muted">Sannolikhet för 8 rätt</span><b id="hit">–</b><span class="muted">modellberäknad</span></div>
+</div>
+<p id="summary"></p>
+<div class="tablewrap"><table id="rowsTable"></table></div>
+<div class="card" style="margin-top:14px"><h2>Export till Svenska Spel – Externa systemspel</h2><p class="muted">Ange det verifierade omgångsnumret. Kontrollera även insats och antal rader. Vi gissar aldrig omgångsnumret.</p><label for="roundNumber">Omgångsnummer (obligatoriskt för export)</label><input id="roundNumber" inputmode="numeric" type="text" placeholder="Ange omgångsnummer från Svenska Spel"><p class="muted" id="exportInfo">Ingen exportfil genererad.</p><div class="buttons"><button id="copy">Kopiera systemfil</button><button class="secondary" id="download">Ladda ned systemfil .txt</button></div></div>
+<label for="output">Valda rader (1/X/2)</label><textarea id="output" rows="7" readonly></textarea>
+</section>
+
+<section class="card" id="sensitivity" hidden>
+<h2>4. Känslighetsanalys – om folkets streck ändras</h2>
+<p class="muted">Vi stresstestar varje vald rad separat: folkets andel på radens utfall höjs eller sänks med 1, 2 eller 5 procentenheter i varje match. Resterande andel fördelas proportionellt på de två andra utfallen. Scenarierna är radvisa stresstester och motsvarar inte en enda gemensam, sammanhängande kupongfördelning. De visar hur känsligt urvalets ROI är för fel i streckprognosen.</p>
+<div class="tablewrap"><table id="sensTable"></table></div>
+<p class="muted" id="sensNote"></p>
+</section>
+
+<section class="card">
+<h2>Modell och begränsningar</h2>
+<p>1. Marknadsoddsen omvandlas till sannolikheter med marginalen borttagen via potensmetoden.</p>
+<p>2. Folkets procent normaliseras match för match. Den uppskattade andelen andra spelare som har en viss rad är produkten av folkets andelar för radens åtta utfall.</p>
+<p>3. Förväntad utdelning modelleras som sannolikheten för 8 rätt multiplicerad med 8-rätt-potten och den förväntade andelen av potten efter delning med andra vinnare. Antalet andra vinnarrader approximeras med en Poissonfördelning.</p>
+<p>5. Skärmdumpar avläses med OCR och måste kontrolleras manuellt. Ett bildavläsningsfel kan annars ge fel EV. Bilderna behandlas i webbläsaren; OCR-biblioteket laddas från CDN.</p>
+<p>4. Alla 3⁸ = 6 561 möjliga enkelrader analyseras. Appen visar de rader som har positivt beräknat EV, sorterade efter högst EV per rad. Om färre än önskat antal är positiva visas färre – appen fyller inte ut med negativa spel.</p>
+<p class="notice muted"><b>Viktigt:</b> detta är en förenklad modell, inte en garanti eller en exakt prognos av utdelningen. Folkets val är inte oberoende i verkligheten (system, favoritkombinationer och spelmönster skapar korrelation). Marknadsodds kan röra sig, och poolandel/omsättning påverkar resultatet kraftigt. Positivt EV i modellen är därför en hypotes som bör tåla känslighetsanalysen – inte ett säkert värde. Spela ansvarsfullt.</p>
+</section>
+</main>
+<script>
+(function(){
+ var d=document.getElementById('diagnostics'),f=document.getElementById('screenshots'),b=document.getElementById('readImages'),status=document.getElementById('ocrStatus');
+ if(d)d.textContent='Grundtest: JavaScript körs. Väntar på huvudprogrammet …';
+ window.addEventListener('error',function(e){if(d)d.textContent='JavaScript-fel: '+e.message+' (rad '+e.lineno+')';});
+ window.addEventListener('unhandledrejection',function(e){if(d)d.textContent='Asynkront fel: '+String(e.reason);});
+ if(f)f.addEventListener('change',function(){if(status)status.textContent=f.files.length+' bild(er) valda.';});
+ if(b)b.addEventListener('click',function(){if(d&&d.textContent.indexOf('Huvudprogrammet klart')<0&&d.textContent.indexOf('OCR')<0)d.textContent='Knappen reagerar, men huvudprogrammet har inte startat. Filvisaren kan blockera skript.';});
+})();
+</script>
+<script>
+const $=id=>document.getElementById(id), OUT=["1","X","2"];
+const EX=[
+"Frölunda - Luleå;2,10;4,00;2,90;48;20;32",
+"Skellefteå - Rögle;1,85;4,20;3,60;55;19;26",
+"Färjestad - Växjö;2,05;4,10;3,00;46;21;33",
+"Leksand - HV71;1,95;4,00;3,35;52;20;28",
+"Örebro - Linköping;2,35;3,90;2,65;34;22;44",
+"Timrå - Brynäs;2,20;4,00;2,80;43;20;37",
+"Malmö - Djurgården;2,45;3,80;2,55;31;22;47",
+"Modo - Luleå;3,10;4,10;2,05;24;19;57"
+].join("\n");
+function n(v){return Number(String(v).trim().replace(",", "."))}
+function fmt(v,d=2){return Number(v).toLocaleString("sv-SE",{minimumFractionDigits:d,maximumFractionDigits:d})}
+function parse(){
+ const lines=$("data").value.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+ if(lines.length!==8)throw Error(`Du behöver ange exakt 8 matcher. Hittade ${lines.length}.`);
+ return lines.map((line,i)=>{
+  const delim=line.includes(";")?";":line.includes("\t")?"\t":",";
+  const c=line.split(delim).map(x=>x.trim());
+  if(c.length!==7)throw Error(`Matchrad ${i+1}: ange matchnamn samt sex tal (odds 1/X/2 och folk % 1/X/2).`);
+  const v=c.slice(1).map(n);
+  if(v.some(x=>!Number.isFinite(x))||v.slice(0,3).some(x=>x<=1)||v.slice(3).some(x=>x<0))
+   throw Error(`Matchrad ${i+1}: kontrollera odds och procenttal.`);
+  if(v.slice(3).reduce((a,b)=>a+b,0)<=0)throw Error(`Matchrad ${i+1}: folkprocent saknas.`);
+  return {name:c[0],odds:v.slice(0,3),folk:v.slice(3)};
+ });
+}
+function fair(odds){
+ const inv=odds.map(x=>1/x),sum=inv.reduce((a,b)=>a+b,0);
+ if(sum<=1.0000001)return inv.map(x=>x/sum);
+ let lo=.01,hi=20;
+ for(let k=0;k<80;k++){const mid=(lo+hi)/2;if(inv.reduce((s,x)=>s+Math.pow(x,mid),0)>1)lo=mid;else hi=mid;}
+ const p=inv.map(x=>Math.pow(x,(lo+hi)/2)),z=p.reduce((a,b)=>a+b,0);
+ return p.map(x=>x/z);
+}
+function prep(matches){
+ matches.forEach(m=>{m.p=fair(m.odds);const s=m.folk.reduce((a,b)=>a+b,0);m.f=m.folk.map(x=>x/s);});
+}
+function poissonShare(lambda){return lambda<1e-9?1:(1-Math.exp(-lambda))/lambda;}
+function calcAll(matches,settings,delta=0){
+ const N=settings.turnover/settings.stake, pool=settings.turnover*settings.share/100+settings.jackpot;
+ const rows=[];
+ for(let code=0;code<6561;code++){
+  let z=code,prob=1,pub=1,parts=[];
+  for(let j=7;j>=0;j--){parts[j]=z%3;z=Math.floor(z/3);}
+  for(let j=0;j<8;j++){
+   const k=parts[j],m=matches[j];prob*=m.p[k];
+   let f=m.f.slice();
+   if(delta!==0){
+    const shift=delta/100;
+    const target=Math.max(.0001,Math.min(.9998,f[k]+shift));
+    const rest=1-f[k],newRest=1-target;
+    for(let q=0;q<3;q++)if(q!==k)f[q]=rest>0?f[q]*newRest/rest:newRest/2;
+    f[k]=target;
+   }
+   pub*=f[k];
+  }
+  const lambda=Math.max(0,(N-1)*pub);
+  const payout=pool*poissonShare(lambda);
+  const ev=prob*payout-settings.stake;
+  rows.push({parts,prob,pub,lambda,payout,ev,roi:ev/settings.stake});
+ }
+ rows.sort((a,b)=>b.ev-a.ev);
+ return rows;
+}
+function portfolio(selected,settings){
+ const cost=selected.length*settings.stake;
+ const expected=selected.reduce((s,r)=>s+r.ev+settings.stake,0);
+ const pHit=selected.reduce((sum,r)=>sum+r.prob,0);
+ return {cost,expected,net:expected-cost,roi:cost?expected/cost-1:0,pHit};
+}
+let lastText=""; let exportRows=[]; let exportStake=1;
+function settings(){return {count:Math.max(1,Math.min(5000,Math.floor(n($("rows").value)||1))),stake:n($("stake").value),turnover:n($("turnover").value),share:n($("share").value),jackpot:n($("jackpot").value)}}
+function run(){
+ $("error").textContent="";$("results").hidden=true;$("sensitivity").hidden=true;
+ try{
+  const ms=parse(),s=settings();
+  if(!(s.stake>0)||s.turnover<0||s.share<0||s.share>100||s.jackpot<0)throw Error("Kontrollera radinsats, omsättning, poolandel och jackpot.");
+  prep(ms);
+  const all=calcAll(ms,s),positive=all.filter(r=>r.ev>0),chosen=positive.slice(0,s.count);
+  if(!chosen.length)throw Error("Ingen av de 6 561 raderna har positivt EV med dessa antaganden. Kontrollera indata, omsättning, pott och streckprocent.");
+  const k=portfolio(chosen,s);
+  $("roi").textContent=fmt(k.roi*100,1)+" %";
+  $("roi").className=k.roi>=0?"positive":"negative";
+  $("net").textContent=fmt(k.net,2)+" kr";
+  $("hit").textContent=fmt(k.pHit*100,3)+" %";
+  $("summary").textContent=`${chosen.length} positiva rader valda av ${all.length} möjliga. Insats ${fmt(k.cost,2)} kr · uppskattad återbetalning ${fmt(k.expected,2)} kr.`;
+  let t="<tr><th>#</th><th>Rad</th><th>P(8 rätt)</th><th>Folkets radandel</th><th>Förv. utdelning</th><th>EV/rad</th><th>ROI/rad</th></tr>";
+  chosen.forEach((r,i)=>{
+   t+=`<tr><td>${i+1}</td><td>${r.parts.map(x=>OUT[x]).join(" ")}</td><td>${fmt(r.prob*100,5)} %</td><td>${fmt(r.pub*100,7)} %</td><td>${fmt(r.payout,2)} kr</td><td class="${r.ev>=0?"positive":"negative"}">${fmt(r.ev,3)} kr</td><td class="${r.roi>=0?"positive":"negative"}">${fmt(r.roi*100,1)} %</td></tr>`;
+  });
+  $("rowsTable").innerHTML=t;
+  exportRows=chosen.map(r=>"E,"+r.parts.map(x=>OUT[x]).join(","));exportStake=s.stake;lastText=exportRows.join("\n")+"\n";
+  $("output").value=lastText;
+  $("results").hidden=false;
+  let st="<tr><th>Scenario</th><th>Portföljens ROI</th><th>Förväntat netto</th></tr>";
+  const scenarios=[-5,-2,-1,0,1,2,5];
+  scenarios.forEach(d=>{
+   const changed=calcAll(ms,s,d),lookup=new Map(changed.map(r=>[r.parts.join(""),r]));
+   const alt=chosen.map(r=>lookup.get(r.parts.join(""))),pk=portfolio(alt,s);
+   st+=`<tr><td>${d===0?"Bas":(d>0?"+":"")+d+" pp på valda utfall"}</td><td class="${pk.roi>=0?"positive":"negative"}">${fmt(pk.roi*100,1)} %</td><td>${fmt(pk.net,2)} kr</td></tr>`;
+  });
+  $("sensTable").innerHTML=st;
+  const adverse=calcAll(ms,s,2),adverseLookup=new Map(adverse.map(x=>[x.parts.join(""),x])),bad=chosen.map(r=>adverseLookup.get(r.parts.join(""))),bk=portfolio(bad,s);
+  $("sensNote").textContent=bk.roi>0?"Urvalet har fortfarande positivt modell-EV när folkets andel på just dina utfall höjs med 2 procentenheter per match. Det är en robusthetssignal, inte en garanti.":"Varning: portföljen tappar positivt EV redan i +2 pp-scenariot. Värdet är känsligt för streckprognosen.";
+  $("sensitivity").hidden=false;
+ }catch(e){$("error").textContent=e.message}
+}
+$("example").onclick=()=>$("data").value="";
+$("clear").onclick=()=>$("data").value="";
+$("calculate").onclick=run;
+function exportFile(){
+ const round=$('roundNumber').value.trim();
+ if(!/^\d{1,9}$/.test(round))throw Error('Ange ett verifierat numeriskt omgångsnummer före export.');
+ if(!exportRows.length)throw Error('Beräkna värderader innan du exporterar.');
+ if(!Number.isInteger(exportStake)||exportStake<1)throw Error('Kontrollera insats per rad. Export kräver heltalsinsats i kronor.');
+ const header=`Powerplay,Omg=${round},Insats=${exportStake}`;
+ const content=header+'\r\n'+exportRows.join('\r\n')+'\r\n';
+ $('exportInfo').textContent=`${exportRows.length} enkelrader · ${exportRows.length*exportStake} kr · omgång ${round}. Kontrollera hos Svenska Spel före inlämning.`;
+ return content;
+}
+$('roundNumber').addEventListener('input',()=>{$('exportInfo').textContent='Omgångsnumret måste vara verifierat innan export.';});
+$('copy').onclick=async()=>{try{const v=exportFile();await navigator.clipboard.writeText(v);$('copy').textContent='Systemfil kopierad';}catch(e){$('exportInfo').textContent=e.message;}};
+$('download').onclick=()=>{try{const v=exportFile(),blob=new Blob([v],{type:'text/plain;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='powerplay-systemfil.txt';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),2000);}catch(e){$('exportInfo').textContent=e.message;}};
+function extractCoupon(raw){
+ const doc=new DOMParser().parseFromString(raw,"text/html");
+ const txt=(doc.body?.textContent||raw).replace(/\\u00a0/g," ").replace(/\\r/g,"");
+ const matches=[];
+ // The official page repeats each match as "Statistik för match N, Home - Away"
+ // followed by a Tipsinfo table with "Svenska folket" and "Aktuellt odds".
+ const re=/Statistik för match\\s+(\\d+)\\s*,\\s*([^\\n]+?)\\s*(?=\\n|\\r|Svenska folket:)/gi;
+ let m,markers=[];
+ while((m=re.exec(txt))!==null)markers.push({number:+m[1],name:m[2].trim(),start:m.index,end:re.lastIndex});
+ // Fallback for compacted HTML where text nodes are joined without newlines.
+ if(markers.length<8){
+  markers=[];const r=/Statistik för match\\s+(\\d+)\\s*,\\s*([^\\n]{3,130}?)\\s*(?=\\n|Svenska folket:)/gi;
+  while((m=r.exec(txt))!==null)markers.push({number:+m[1],name:m[2].trim(),start:m.index,end:r.lastIndex});
+ }
+ for(let i=0;i<markers.length;i++){
+  const cur=markers[i],end=i+1<markers.length?markers[i+1].start:Math.min(txt.length,cur.start+2500);
+  const block=txt.slice(cur.end,end);
+  const f=block.match(/Svenska folket\\s*[:|]?\\s*(\\d+(?:[.,]\\d+)?)\\s*%\\s*(?:\\|\\s*)?(\\d+(?:[.,]\\d+)?)\\s*%\\s*(?:\\|\\s*)?(\\d+(?:[.,]\\d+)?)\\s*%/i);
+  const o=block.match(/Aktuellt odds\\s*[:|]?\\s*(\\d+(?:[.,]\\d+)?)\\s*(?:\\||\\s)+\\s*(\\d+(?:[.,]\\d+)?)\\s*(?:\\||\\s)+\\s*(\\d+(?:[.,]\\d+)?)/i);
+  if(f&&o)matches.push({number:cur.number,name:cur.name,folk:f.slice(1,4).map(n),odds:o.slice(1,4).map(n)});
+ }
+ const uniq=new Map(matches.map(x=>[x.number,x]));
+ if(uniq.size!==8||[1,2,3,4,5,6,7,8].some(k=>!uniq.has(k)))throw Error("Kunde inte identifiera alla 8 matcher med både odds och streck. Prova att kopiera sidans fullständiga text/HTML eller mata in manuellt.");
+ return [...uniq.values()].sort((a,b)=>a.number-b.number).map(x=>[x.name,...x.odds,...x.folk].join(";")).join("\\n");
+}
+function importCoupon(raw,source){
+ const value=extractCoupon(raw);
+ $("data").value=value;
+ $("fetchStatus").textContent="8 matcher inlästa från "+source+". Kontrollera matcherna och kör EV-analysen. Uppgifterna är en ögonblicksbild.";
+}
+// Importknapparna från en äldre version finns inte i denna HTML.
+// Bind inte händelser till saknade element: det avbryter all efterföljande JavaScript.
+
+$("data").value="";
+
+// Bildavläsning: Tesseract.js laddas först när användaren klickar på knappen.
+let ocrRows=[];
+function loadTesseract(){
+ return new Promise((resolve,reject)=>{
+  if(window.Tesseract){resolve();return;}
+  const script=document.createElement('script');
+  script.src='https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
+  script.crossOrigin='anonymous';
+  script.onload=()=>window.Tesseract?resolve():reject(new Error('OCR-biblioteket kunde inte startas.'));
+  setTimeout(()=>reject(new Error('Tidsgränsen för nedladdning av OCR-biblioteket passerades (25 s). Öppna HTML-filen i Safari och kontrollera internet.')),25000);
+  script.onerror=()=>reject(new Error('Kunde inte hämta OCR-biblioteket. Kontrollera internetanslutningen.'));
+  document.head.appendChild(script);
+ });
+}
+function extractNumbers(str){
+ const matches=[...str.matchAll(/(?<![A-Za-zÅÄÖåäö0-9])\d{1,4}(?:[.,]\d{1,3})?\s*%?/g)];
+ return matches.map(m=>({value:n(m[0].replace('%','').trim()),pct:m[0].includes('%'),start:m.index,end:m.index+m[0].length}));
+}
+function guessRow(line,order){
+ let t=line.replace(/[|]/g,' ').replace(/[–—]/g,' - ').trim();
+ // Ta bort eventuell matchnumrering innan lagen, men behåll övrig text.
+ t=t.replace(/^\s*(?:match\s*)?([1-8])[.)\s:-]+/i,'');
+ let nums=extractNumbers(t);
+ let selected=null,off=0;
+ // Prioritera sex på varandra följande värden som kan vara tre odds och tre procenttal.
+ for(let j=0;j<=nums.length-6;j++){
+  const six=nums.slice(j,j+6),a=six.slice(0,3),b=six.slice(3,6);
+  const aOdds=a.every(x=>x.value>1&&x.value<150),bOdds=b.every(x=>x.value>1&&x.value<150);
+  const aF=a.every(x=>x.value>=0&&x.value<=100),bF=b.every(x=>x.value>=0&&x.value<=100);
+  const aSum=a.reduce((v,x)=>v+x.value,0),bSum=b.reduce((v,x)=>v+x.value,0);
+  const opt1=aOdds&&bF&&bSum>=80&&bSum<=120;
+  const opt2=bOdds&&aF&&aSum>=80&&aSum<=120;
+  if(opt1||opt2){selected=six;off=j;break;}
+ }
+ if(!selected&&nums.length>=6){selected=nums.slice(-6);off=nums.length-6;}
+ let name=(selected?t.slice(0,selected[0].start):t).replace(/\s+/g,' ').trim();
+ if(!name||/^\d+$/.test(name))name='Match';
+ if(!selected)return {name,odds:['','',''],folk:['','',''],source:line};
+ const a=selected.slice(0,3),b=selected.slice(3,6);
+ let folkFirst=order==='folkfirst';
+ if(order==='auto'){
+  const ap=a.filter(x=>x.pct).length,bp=b.filter(x=>x.pct).length;
+  if(ap!==bp)folkFirst=ap>bp;
+  else {
+   const sumA=a.reduce((v,x)=>v+x.value,0),sumB=b.reduce((v,x)=>v+x.value,0);
+   folkFirst=Math.abs(sumA-100)<Math.abs(sumB-100);
+  }
+ }
+ return {name,odds:(folkFirst?b:a).map(x=>x.value),folk:(folkFirst?a:b).map(x=>x.value),source:line};
+}
+function extractTriplet(text,kind){
+ const candidates=[...text.matchAll(/\d{1,3}(?:[.,]\d{1,2})?\s*%?|\d{1,2}[.,]\d{1,3}/g)]
+  .map(m=>({value:n(m[0].replace('%','')),pct:m[0].includes('%'),raw:m[0]}));
+ for(let i=0;i<=candidates.length-3;i++){
+  const a=candidates.slice(i,i+3),v=a.map(x=>x.value);
+  if(kind==='folk'&&v.every(x=>x>=0&&x<=100)&&v.reduce((x,y)=>x+y,0)>=97&&v.reduce((x,y)=>x+y,0)<=103)return v;
+  if(kind==='odds'&&v.every(x=>x>1&&x<150)&&a.every(x=>!x.pct))return v;
+ }
+ return null;
+}
+// Version 5: läs varje visuellt matchkort som tre separata zoner.
+// Identifiera vita matchkort mot sidans ljusrosa bakgrund med pixelprov.
+function findCards(img){
+ // Identifiera kortens vita bakgrund via flera vertikala provlinjer.
+ // Denna funktion gissar ALDRIG matchnummer från kortens ordning.
+ const W=img.naturalWidth,H=img.naturalHeight;
+ const canvas=document.createElement('canvas');canvas.width=W;canvas.height=H;
+ const ctx=canvas.getContext('2d',{willReadFrequently:true});ctx.drawImage(img,0,0);
+ const xs=[.045,.055,.075,.09].map(x=>Math.round(W*x));
+ const pixels=xs.map(x=>ctx.getImageData(x,0,1,H).data);
+ const isWhite=y=>pixels.filter(data=>{const k=y*4;return data[k]>244&&data[k+1]>244&&data[k+2]>244}).length>=3;
+ const spans=[];let start=-1;
+ for(let y=Math.round(H*.10);y<H;y+=2){
+  const yes=isWhite(y);
+  if(yes&&start<0)start=y;
+  if(!yes&&start>=0){if(y-start>W*.16&&y-start<W*.85)spans.push({top:start,bottom:y});start=-1;}
+ }
+ if(start>=0&&H-start>W*.16&&H-start<W*.85)spans.push({top:start,bottom:H});
+ return spans;
+}
+function cropZone(img,card,zone){
+ const W=img.naturalWidth,H=card.bottom-card.top;
+ const spec=zone==='number'?[.045,.115,.08,.39]:zone==='team'?[.095,.53,.08,.49]:zone==='folk'?[.585,.975,.53,.78]:[.585,.975,.75,.99];
+ const sx=Math.floor(W*spec[0]),sy=Math.floor(card.top+H*spec[2]);
+ const sw=Math.floor(W*(spec[1]-spec[0])),sh=Math.floor(H*(spec[3]-spec[2]));
+ const c=document.createElement('canvas');c.width=sw*2;c.height=sh*2;
+ const ctx=c.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,c.width,c.height);
+ ctx.drawImage(img,sx,sy,sw,sh,0,0,c.width,c.height);
+ return c;
+}
+function parseThree(text,percent){
+ const tokens=(text.match(/\d{1,3}(?:[.,]\d{1,2})?\s*%?/g)||[]).map(t=>t.replace(/\s*%/,'').replace(',','.'));
+ if(tokens.length!==3)return null;
+ const vals=tokens.map(t=>{
+  if(!percent&&/^\d{3}$/.test(t))return Number(t[0]+'.'+t.slice(1));
+  return Number(t);
+ });
+ if(percent){if(vals.some(v=>v<0||v>100)||Math.abs(vals.reduce((a,b)=>a+b,0)-100)>3)return null;}
+ else if(vals.some(v=>v<=1||v>=30))return null;
+ return vals;
+}
+function parseTeam(text){
+ const ls=text.split(/\n/).map(s=>s.trim().replace(/^[1-8]\s+/,'')).filter(Boolean)
+ .filter(s=>!/^(1|X|2|Svenska folket|Aktuellt odds)$/i.test(s));
+ const cleaned=ls.map(s=>s.replace(/\s+[xX]\s*[125]\s*$/,'').replace(/^[1-8]\s+/,'').trim()).filter(Boolean);
+ if(cleaned.length<2)return null;
+ return cleaned.slice(0,2).join(' - ');
+}
+function readMatchNumber(raw){
+ const cleaned=raw.replace(/[Il|]/g,'1').replace(/[Oo]/g,'0').trim();
+ const found=cleaned.match(/(?:^|\s)([1-8])(?:\s|$)/);
+ return found?Number(found[1]):null;
+}
+async function readCardZones(worker,img){
+ const cards=findCards(img),out=[];
+ for(const card of cards){
+  const zones={};
+  for(const kind of ['number','team','folk','odds']){
+   const result=await worker.recognize(cropZone(img,card,kind));
+   zones[kind]=result.data.text;
+  }
+  const number=readMatchNumber(zones.number);
+  const folk=parseThree(zones.folk,true),odds=parseThree(zones.odds,false),name=parseTeam(zones.team);
+  out.push({number,name:name||'',folk:folk||['','',''],odds:odds||['','',''],source:JSON.stringify(zones),top:card.top});
+ }
+ return out;
+}
+// Layoutmedveten avläsning: OCR-ord grupperas efter deras faktiska positioner.
+// Matchkortens "Svenska folket" och "Aktuellt odds" används som ankare.
+function parsePositionedWords(words){
+ const good=(words||[]).filter(w=>w.text&&w.bbox&&Number.isFinite(w.bbox.x0));
+ if(!good.length)return [];
+ const lines=[];
+ good.sort((a,b)=>(a.bbox.y0+a.bbox.y1-b.bbox.y0-b.bbox.y1)/2||a.bbox.x0-b.bbox.x0);
+ for(const w of good){
+  const cy=(w.bbox.y0+w.bbox.y1)/2;
+  let line=lines.find(l=>Math.abs(l.y-cy)<Math.max(10,(w.bbox.y1-w.bbox.y0)*0.55));
+  if(!line){line={y:cy,words:[]};lines.push(line)}
+  line.words.push(w);
+ }
+ lines.sort((a,b)=>a.y-b.y);
+ lines.forEach(l=>{l.words.sort((a,b)=>a.bbox.x0-b.bbox.x0);l.text=l.words.map(w=>w.text).join(' ')});
+ const results=[];
+ for(let i=0;i<lines.length;i++){
+  if(!/svenska\s*folket/i.test(lines[i].text))continue;
+  const oddsIndex=lines.findIndex((l,j)=>j>i&&j<=i+3&&/aktuellt\s*odds/i.test(l.text));
+  if(oddsIndex<0)continue;
+  const folkLine=lines[i],oddsLine=lines[oddsIndex];
+  const extract=(line,percent)=>{
+   const labelEnd=Math.max(...line.words.filter(w=>/svenska|folket|aktuellt|odds/i.test(w.text)).map(w=>w.bbox.x1),0);
+   const right=line.words.filter(w=>w.bbox.x0>labelEnd+10);
+   const vals=[];
+   for(const w of right){const clean=w.text.replace(/[%:]/g,'').replace(/[,]/g,'.').replace(/[^\d.]/g,'');if(!clean)continue;
+    let v=Number(clean);
+    if(!percent&&/^\d{3}$/.test(clean)&&v>20)v=Number(clean[0]+'.'+clean.slice(1));
+    if(Number.isFinite(v)&& (percent?v>=0&&v<=100:v>1&&v<25))vals.push({x:(w.bbox.x0+w.bbox.x1)/2,value:v});
+   }
+   return vals.sort((a,b)=>a.x-b.x).slice(0,3).map(v=>v.value);
+  };
+  const folk=extract(folkLine,true),odds=extract(oddsLine,false);
+  const prev=lines.slice(Math.max(0,i-5),i).filter(l=>l.y<folkLine.y);
+  const numberLine=prev.find(l=>/^\s*[1-8]\s+\S/.test(l.text));
+  let id=numberLine?Number(numberLine.text.match(/^\s*([1-8])/)[1]):null;
+  if(!id){const only=prev.find(l=>/^\s*[1-8]\s*$/.test(l.text));if(only)id=Number(only.text.trim())}
+  const candidates=prev.filter(l=>!/(1\s*X\s*2|spelpaus|spelgränser|insats|kupong|aktuellt|svenska|fyll i)/i.test(l.text));
+  let name='';
+  if(numberLine){const ix=prev.indexOf(numberLine);name=[numberLine.text.replace(/^\s*[1-8]\s*/,''),...prev.slice(ix+1).map(l=>l.text)].filter(Boolean).slice(0,2).join(' - ')}
+  else name=candidates.slice(-2).map(l=>l.text).join(' - ');
+  if(id&&folk.length===3&&odds.length===3&&Math.abs(folk.reduce((a,b)=>a+b,0)-100)<=3)
+   results.push({id,name:name||'Match '+id,folk,odds});
+ }
+ return results;
+}
+function interpretOcr(){
+ const raw=$('ocrText').value.replace(/\u00a0/g,' ').replace(/\r/g,'');
+ const lines=raw.split('\n').map(x=>x.trim()).filter(Boolean);
+ const found=new Map();
+ // Svenska Spels mobilvy: matchnummer + två lag, därefter 'Svenska folket' och 'Aktuellt odds'.
+ // Nummer används för att kunna läsa in skärmdumpar i valfri ordning.
+ for(let i=0;i<lines.length;i++){
+  const line=lines[i];
+  const match=line.match(/^\s*([1-8])\s+(.{2,})$/);
+  if(!match||/^(?:kr|%|x|1|2|3|4|5|10|24\s*h)/i.test(match[2]))continue;
+  const id=Number(match[1]);
+  const end=Math.min(lines.length,i+13);
+  const chunk=lines.slice(i,end);
+  const fi=chunk.findIndex(x=>/svenska\s*folket\s*[:.]?/i.test(x));
+  const oi=chunk.findIndex(x=>/aktuellt\s*odds\s*[:.]?/i.test(x));
+  if(fi<0||oi<0||oi<=fi)continue;
+  const nameLines=chunk.slice(0,fi).map((x,j)=>j===0?x.replace(/^\s*[1-8]\s+/,''):x)
+    .filter(x=>x&&!/^(1|x|2|svenska folket)$/i.test(x));
+  const name=nameLines.slice(0,2).join(' - ');
+  const folk=extractTriplet(chunk.slice(fi,oi).join(' '),'folk');
+  const odds=extractTriplet(chunk.slice(oi,Math.min(chunk.length,oi+4)).join(' '),'odds');
+  if(name&&folk&&odds)found.set(id,{name,folk,odds,source:chunk.join(' | ')});
+ }
+ // OCR kan lägga en radbrytning efter matchnumret; alternativt sök efter etikettblock.
+ if(found.size<8){
+  for(let i=0;i<lines.length;i++){
+   if(!/svenska\s*folket/i.test(lines[i]))continue;
+   const prev=lines.slice(Math.max(0,i-5),i);
+   let id=null,name='';
+   for(let j=prev.length-1;j>=0;j--){
+    const m=prev[j].match(/^([1-8])(?:\s+(.+))?$/);
+    if(m){id=+m[1];name=[m[2]||'',...prev.slice(j+1)].filter(Boolean).slice(0,2).join(' - ');break;}
+   }
+   if(!id||found.has(id))continue;
+   const after=lines.slice(i,i+8),oi=after.findIndex(x=>/aktuellt\s*odds/i.test(x));
+   if(oi<0)continue;
+   const folk=extractTriplet(after.slice(0,oi).join(' '),'folk');
+   const odds=extractTriplet(after.slice(oi,oi+4).join(' '),'odds');
+   if(folk&&odds)found.set(id,{name:name||'Match '+id,folk,odds,source:after.join(' | ')});
+  }
+ }
+ // Äldre tabellayout: sex siffror på en och samma rad.
+ if(found.size===0){
+  const order=$('ocrOrder').value;let j=1;
+  for(const line of lines){
+   const candidate=guessRow(line,order);
+   if(candidate.odds.some(x=>x!=='')){found.set(j,candidate);j++;if(j>8)break;}
+  }
+ }
+ ocrRows=Array.from({length:8},(_,i)=>found.get(i+1)||{name:'Match '+(i+1),odds:['','',''],folk:['','',''],source:''});
+ renderOcr();
+ const missing=Array.from({length:8},(_,i)=>i+1).filter(i=>!found.has(i));
+ $('ocrStatus').textContent=`Avläste ${found.size} av 8 matcher. ${missing.length?'Kontrollera särskilt match '+missing.join(', ')+'.':'Alla matchnummer identifierade.'} Kontrollera alla siffror innan import.`;
+}
+function renderOcr(){
+ const table=$('ocrTable');table.textContent='';
+ const head=document.createElement('tr');
+ ['#','Match','Odds 1','Odds X','Odds 2','Folk 1 %','Folk X %','Folk 2 %'].forEach(v=>{const th=document.createElement('th');th.textContent=v;head.appendChild(th)});
+ table.appendChild(head);
+ ocrRows.forEach((r,i)=>{
+  const tr=document.createElement('tr');const no=document.createElement('td');no.textContent=i+1;tr.appendChild(no);
+  [r.name,...r.odds,...r.folk].forEach((v,k)=>{
+   const td=document.createElement('td'),input=document.createElement('input');input.value=v??'';
+   input.style.width=k===0?'170px':'76px';input.style.padding='7px';input.setAttribute('aria-label',`Match ${i+1} ${['namn','odds 1','odds X','odds 2','folk 1','folk X','folk 2'][k]}`);
+   input.dataset.row=i;input.dataset.col=k;td.appendChild(input);tr.appendChild(td);
+  });table.appendChild(tr);
+ });
+ $('ocrReview').hidden=false;
+}
+$('interpretText').onclick=interpretOcr;
+$('ocrOrder').onchange=()=>{if($('ocrText').value.trim())interpretOcr()};
+$('confirmOcr').onclick=()=>{
+ $('ocrError').textContent='';
+ try{
+  const rows=[];
+  for(let i=0;i<8;i++){
+   const fields=[...$('ocrTable').querySelectorAll(`input[data-row="${i}"]`)].map(x=>x.value.trim());
+   if(fields.length!==7||!fields[0])throw Error(`Match ${i+1}: fyll i matchnamnet.`);
+   const vals=fields.slice(1).map(v=>v===''?NaN:n(v));
+   if(vals.some(v=>!Number.isFinite(v)))throw Error(`Match ${i+1}: alla odds och streck måste vara ifyllda.`);
+   if(vals.slice(0,3).some(v=>v<=1||v>150))throw Error(`Match ${i+1}: ett eller flera odds är orimliga.`);
+   const folk=vals.slice(3),sum=folk.reduce((a,b)=>a+b,0);
+   if(folk.some(v=>v<0||v>100)||sum<98||sum>102)throw Error(`Match ${i+1}: folkets streck summerar till ${fmt(sum,1)} %, inte cirka 100 %.`);
+   rows.push([fields[0],...vals].join(';'));
+  }
+  $('data').value=rows.join('\n');
+  $('ocrStatus').textContent='Kupongen är importerad. Kontrollera den en sista gång under steg 1 och tryck sedan på Beräkna värderader.';
+  $('data').scrollIntoView({behavior:'smooth',block:'center'});
+ }catch(e){$('ocrError').textContent=e.message;}
+};
+$('screenshots').addEventListener('change',()=>{const files=$('screenshots').files; $('ocrStatus').textContent=files.length+' bild(er) valda. Tryck på Läs av bilder.'; $('diagnostics').textContent='Filval registrerat: '+[...files].map(f=>f.name+' ('+Math.round(f.size/1024)+' kB)').join(', ');});
+$('readImages').onclick=async()=>{
+ $('ocrStatus').textContent='Knappen fungerar. Kontrollerar valda bilder …'; $('diagnostics').textContent='Klick registrerat. JavaScript körs.';
+ const files=[...$('screenshots').files];
+ if(!files.length){$('ocrStatus').textContent='Välj minst en skärmdump först.';return;}
+ const button=$('readImages');button.disabled=true;$('ocrProgress').style.display='block';$('ocrProgress').value=0;
+ try{
+  $('ocrStatus').textContent='Laddar OCR-biblioteket …';$('diagnostics').textContent='Steg 1/3: hämtar Tesseract från internet';await loadTesseract();
+  $('ocrStatus').textContent='Startar OCR-motorn (kan ta 10–30 sekunder första gången) …';$('diagnostics').textContent='OCR: startar motor';$('diagnostics').textContent='Steg 2/3: startar OCR-worker';
+  const worker=await Promise.race([Tesseract.createWorker('swe+eng',1,{logger:msg=>{
+   if(msg.status==='recognizing text')$('ocrProgress').value=Math.round((msg.progress||0)*100);
+  }}),new Promise((_,reject)=>setTimeout(()=>reject(new Error('OCR-motorn svarade inte inom 60 sekunder.')),60000))]);
+  const texts=[],cardResults=[];
+  try{
+   for(let i=0;i<files.length;i++){
+    $('ocrStatus').textContent=`Delar upp bild ${i+1} av ${files.length} i matchkort …`;
+    const url=URL.createObjectURL(files[i]),img=new Image();
+    try{await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=()=>reject(new Error('Bilden kunde inte öppnas.'));img.src=url;});}
+    finally{URL.revokeObjectURL(url);}
+    const cards=await readCardZones(worker,img);
+    cardResults.push(...cards);
+    texts.push(cards.map(c=>c.source).join('\n'));
+   }
+  }finally{await worker.terminate();}
+  $('ocrText').value=texts.join('\n');
+  ocrRows=Array.from({length:8},(_,i)=>({name:'',odds:['','',''],folk:['','',''],source:'',number:i+1}));
+  const unknown=[],duplicates=[];
+  for(const result of cardResults){
+   if(!result.number){unknown.push(result);continue;}
+   const index=result.number-1,existing=ocrRows[index];
+   const score=r=>[r.name,...r.odds,...r.folk].filter(v=>v!==''&&v!=null).length;
+   if(score(existing)>0)duplicates.push(result.number);
+   if(score(result)>score(existing))ocrRows[index]=result;
+  }
+  renderOcr();
+  const complete=ocrRows.filter(r=>r.name&&r.odds.every(v=>v!=='')&&r.folk.every(v=>v!=='')).length;
+  $('ocrStatus').textContent=`Kort hittade: ${cardResults.length}. Nummeridentifierade: ${cardResults.length-unknown.length}. Fullständiga: ${complete}/8. ${unknown.length?'OBS: '+unknown.length+' kort utan säkert matchnummer har INTE flyttats till annan position.':''} Kontrollera mot bilderna.`;
+  $('diagnostics').textContent='Matchnummerstyrd OCR klar. Oidentifierade kort: '+unknown.length+'. Dubbletter: '+[...new Set(duplicates)].join(', ')+'. Saknade värden lämnas tomma.';
+ }catch(e){$('diagnostics').textContent='Fel vid OCR: '+(e?.message||String(e));$('ocrStatus').textContent='Bildavläsningen misslyckades: '+(e?.message||String(e))+'. Om filen öppnas i en iPhone-förhandsvisning, välj Dela → Öppna i Safari. Alternativt klistra in kupongdata manuellt.';}
+ finally{button.disabled=false;$('ocrProgress').style.display='none';}
+};
+
+window.addEventListener('error',e=>{const d=$('diagnostics');if(d)d.textContent='JavaScript-fel: '+e.message+' (rad '+e.lineno+')';});
+$('diagnostics').textContent='Huvudprogrammet klart ✓. Välj bilder för att testa OCR.';
+</script></body></html>
